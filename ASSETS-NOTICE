@@ -1,0 +1,18 @@
+ASSETS NOTICE / 资产声明
+=========================
+
+[EN] The interface artwork in this repository — backgrounds, crystal
+skins, the orb and all sprites — consists of PLACEHOLDER assets,
+included only so the project runs out of the box. The original artwork
+is © 2026 papercup authors and is NOT licensed under AGPL-3.0, NOT
+redistributable, and NOT included in this repository. Fonts are also
+omitted; the UI falls back to system serifs. The interface structure
+code (HTML/CSS/JS, including the border-image skinning pipeline and
+the orb animation choreography) is open under AGPL-3.0 together with
+the rest of the project.
+
+[CN] 本仓库中的界面美术——背景图、水晶皮肤、悬浮球与全部粒子——均为
+占位图，仅保证项目开箱即可运行。原始美术资产版权归 papercup 作者所有，
+不以 AGPL-3.0 授权、不可再分发、亦不随本仓库提供。字体同样不随仓库分发，
+界面会回落到系统衬线字体。界面结构代码（HTML/CSS/JS，含九宫格皮肤管线
+与悬浮球动画编舞）与项目其余部分相同，按 AGPL-3.0 开放。

@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+<title>Papercup</title>
+<script>/* 逃生门：?ui=legacy 回旧版金饼（DOMContentLoaded 后再跳，避免解析期导航竞态） */
+if (location.search.indexOf('ui=legacy') >= 0) addEventListener('DOMContentLoaded', () => location.replace('legacy.html'));</script>
+<style>
+/* ============ 自托管字体（大陆直连 Google Fonts 不可达，子集文件随仓库走） ============ */
+@font-face{
+  font-family:"Cormorant Garamond";
+  src:url("assets/fonts/cormorant-subset.woff2") format("woff2");
+  font-weight:400 600; font-display:swap;
+}
+@font-face{
+  font-family:"Alex Brush";
+  src:url("assets/fonts/alex-brush-subset.woff2") format("woff2");
+  font-weight:400; font-display:swap;
+}
+/* ============ Tokens（设计稿 §9 色彩与材质） ============ */
+:root{
+  --ice:#A6C8FF; --silver:#E8F1FF; --night:#0B1430; --pink:#FFD1E6;
+  --glass-bg:rgba(255,255,255,.08); --glass-brd:rgba(255,255,255,.25);
+  --glass-shadow:0 8px 32px rgba(166,200,255,.25), 0 0 20px rgba(255,255,255,.15) inset;
+  --serif:"Cormorant Garamond","Georgia","STSong",serif;
+  --script:"Alex Brush","Segoe Script",cursive;
+  --sans:"PingFang SC","HarmonyOS Sans",system-ui,sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{
+  background:var(--night); color:var(--silver); font-family:var(--sans);
+  overflow:hidden; user-select:none; -webkit-user-select:none;
+}
+.glass{
+  background:var(--glass-bg);
+  -webkit-backdrop-filter:blur(16px); backdrop-filter:blur(16px);
+  border:1px solid var(--glass-brd); box-shadow:var(--glass-shadow); border-radius:20px;
+}
+@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
+  .glass{ background:rgba(14,24,52,.78); }   /* 玻璃降级：实底夜蓝（拨号页皮肤是图片，无需降级） */
+}
+.hidden{ display:none !important; }
+
+/* ============ 通话视图 ============ */
+#callview{ position:fixed; inset:0; display:flex; flex-direction:column; }
+#bg{ position:absolute; inset:0; background:url(assets/bg-call.webp) center/cover no-repeat; z-index:-1; }
+#topbar{ position:relative; flex-shrink:0; padding-top:max(14px, env(safe-area-inset-top)); text-align:center; z-index:3; }
+#topbar .who{ font-family:var(--serif); font-size:23px; letter-spacing:2px; color:var(--silver); text-shadow:0 0 14px rgba(166,200,255,.5); }
+#state{ font-size:12px; letter-spacing:4px; color:rgba(232,241,255,.72); margin-top:2px; }
+#duration{ font-family:var(--serif); font-size:26px; color:var(--ice); letter-spacing:2px; margin-top:1px; font-variant-numeric:tabular-nums; }
+#lat{ position:absolute; top:max(16px, env(safe-area-inset-top)); right:12px; font-size:10px;
+      padding:6px 10px; border-radius:14px; color:rgba(232,241,255,.85); letter-spacing:1px; }
+#lat:empty{ display:none; }
+#muteTip{ position:relative; z-index:3; text-align:center; font-size:12px; color:var(--pink);
+          min-height:18px; letter-spacing:2px; padding-top:4px; text-shadow:0 0 8px rgba(255,209,230,.4); }
+#build{ position:absolute; bottom:4px; right:10px; font-size:10px; color:rgba(232,241,255,.4); z-index:4; }
+
+/* ---- 水晶球（docs/ORB-ANIMATION-SPEC.md v1 锁版） ---- */
+#stage{ flex:1; position:relative; display:flex; align-items:center; justify-content:center; min-height:120px; }
+.orb-scene{
+  --orb-level:0; --voice-glow:0;
+  position:relative; width:min(60vw,280px); aspect-ratio:1;
+  perspective:800px;
+}
+.orb-ripple{
+  position:absolute; inset:-4%; background:url(assets/sprites/ripple1.png) center/contain no-repeat;
+  opacity:0; pointer-events:none;
+}
+/* 星轨：珠子走屏幕空间椭圆（offset-path），永远正圆不压扁；远半球同步变暗造纵深 */
+.bead-track{ position:absolute; inset:0; pointer-events:none; }
+.bt-a{ transform:rotate(-16deg); }
+.bt-b{ transform:rotate(40deg); }
+.bead-dot{
+  position:absolute; left:0; top:0; width:8%; aspect-ratio:1; margin:-4% 0 0 -4%;
+  offset-path:ellipse(47% 16% at 50% 50%);
+  offset-rotate:0deg;
+  animation:orbitSpin 22s linear infinite, beadPhase 22s linear infinite;
+}
+.bt-b .bead-dot{
+  width:6%; margin:-3% 0 0 -3%;
+  offset-path:ellipse(42% 27% at 50% 50%);
+  animation:orbitSpinB 31s linear infinite, beadPhase 31s linear infinite;
+}
+.bead-dot img{ width:100%; height:100%; display:block;
+  animation:crystalTwinkle 5.7s ease-in-out infinite; }
+.bt-b .bead-dot img{ animation-delay:-3.8s; }
+@keyframes orbitSpin{ from{ offset-distance:0%; } to{ offset-distance:100%; } }
+@keyframes orbitSpinB{ from{ offset-distance:100%; } to{ offset-distance:0%; } }
+@keyframes beadPhase{  /* 走到上半圈（球后方）时变暗 */
+  0%,50%{ opacity:1; } 75%{ opacity:.5; } 100%{ opacity:1; }
+}
+.crystal-bead{ width:100%; height:100%; }
+@keyframes crystalTwinkle{
+  0%,72%,100%{ filter:brightness(.95); }
+  78%{ filter:brightness(1.45) drop-shadow(0 0 6px rgba(230,245,255,.8)); }
+}
+.orb-float{ position:absolute; inset:0; animation:orbFloat 6.8s ease-in-out infinite; }
+@keyframes orbFloat{
+  0%,100%{ transform:translate3d(0,0,0); }
+  35%    { transform:translate3d(1px,-5px,0); }
+  70%    { transform:translate3d(-1px,2px,0); }
+}
+.orb-core{
+  position:absolute; inset:0; width:100%; height:100%;
+  object-fit:contain;   /* 球体原始比例渲染：星环撑宽画布，硬塞方框会把球拉成椭圆 */
+  transform:scale(calc(1 + var(--orb-level) * .025));
+  transition:transform 80ms linear;
+  animation:orbBreathe 4.8s ease-in-out infinite;
+  will-change:transform, filter;
+}
+@keyframes orbBreathe{   /* 呼吸+speaking 增亮合并进同一 filter 动画（--voice-glow 实时生效） */
+  0%,100%{
+    filter:brightness(calc(1 + var(--voice-glow) * .04))
+           drop-shadow(0 0 8px rgba(190,220,255,.20))
+           drop-shadow(0 0 22px rgba(120,165,255,.10));
+  }
+  50%{
+    filter:brightness(calc(1.06 + var(--voice-glow) * .12))
+           drop-shadow(0 0 calc(12px + var(--voice-glow) * 12px) rgba(210,235,255,.32))
+           drop-shadow(0 0 calc(32px + var(--voice-glow) * 10px) rgba(135,175,255,.18));
+  }
+}
+.orb-inner-glow{
+  position:absolute; left:18%; right:18%; top:38%; bottom:18%; pointer-events:none; opacity:0;
+  background:radial-gradient(closest-side at 50% 55%, rgba(255,209,230,.55), rgba(166,200,255,.18) 55%, transparent 78%);
+  filter:blur(14px);
+}
+.glint{ position:absolute; width:16px; height:16px; opacity:0; pointer-events:none; }
+.glint::before,.glint::after{ content:""; position:absolute; left:50%; top:50%; background:linear-gradient(180deg,#fff,rgba(210,235,255,.6));
+  border-radius:2px; box-shadow:0 0 6px rgba(230,245,255,.9); }
+.glint::before{ width:2px; height:100%; transform:translate(-50%,-50%); }
+.glint::after{ width:100%; height:2px; transform:translate(-50%,-50%); }
+.glint-a{ left:16%; top:20%; } .glint-b{ right:10%; top:56%; } .glint-c{ left:38%; bottom:12%; }
+.glint.flash{ animation:refractFlash 720ms ease-out forwards; }
+@keyframes refractFlash{
+  0%  { opacity:0; transform:scale(.25) rotate(0deg); }
+  35% { opacity:1; transform:scale(1) rotate(12deg); }
+  100%{ opacity:0; transform:scale(1.35) rotate(22deg); }
+}
+/* 状态机（spec：listening 涟漪 / thinking 内聚 / speaking 唤醒） */
+[data-state="listening"] .orb-ripple{ animation:listeningRipple 2.8s ease-out infinite; }
+@keyframes listeningRipple{
+  0%{ opacity:.22; transform:scale(.88); }
+  70%,100%{ opacity:0; transform:scale(1.14); }
+}
+[data-state="thinking"] .orb-inner-glow{ animation:thinkingGather 2.4s ease-in-out infinite; }
+@keyframes thinkingGather{
+  0%,100%{ opacity:.22; transform:scale(1.08); filter:blur(18px); }
+  50%    { opacity:.48; transform:scale(.82);  filter:blur(10px); }
+}
+[data-state="speaking"] .bead-dot{ animation-duration:15s,15s; }
+[data-state="speaking"] .bt-b .bead-dot{ animation-duration:21s,21s; }
+
+/* ---- 字幕气泡（九宫格水晶皮肤：K 大框自适应行数，你=小胶囊） ---- */
+#sub{
+  position:relative; z-index:3; display:flex; flex-direction:column;
+  width:min(92%,540px); margin:0 auto; max-height:31vh; overflow-y:auto;
+  -webkit-overflow-scrolling:touch; scroll-behavior:smooth; padding:4px 2px 24px;
+  scrollbar-width:none;
+}
+#sub::-webkit-scrollbar{ display:none; }
+#sub > *{ flex:none; }  /* 滚动内容永不收缩：气泡被压缩=文字裸奔出皮肤 */
+.bub{ max-width:82%; margin:7px 0; position:relative; }
+.bub.k{ align-self:flex-start; padding:16px 22px 14px;
+  text-shadow:0 1px 3px rgba(7,13,30,.95), 0 0 10px rgba(7,13,30,.75); }
+.bub.k::before{
+  content:""; position:absolute; inset:0; pointer-events:none;
+  border-style:solid; border-width:34px 40px 24px 38px;
+  border-image-source:url("assets/skins/chat-k-skin.png");
+  border-image-slice:220 240 140 230 fill;
+  border-image-repeat:stretch;
+}
+/* 暗纱已按判词撤除——中央全透，文字靠深色光晕阴影保可读 */
+.bub.k > *, .bub.you > *{ position:relative; z-index:1;
+  text-shadow:0 1px 3px rgba(7,13,30,.95), 0 0 10px rgba(7,13,30,.75); }
+.bub.you{ align-self:flex-end; padding:8px 34px; min-height:44px;
+  display:flex; align-items:center; color:rgba(245,250,255,.96);
+  text-shadow:0 1px 3px rgba(7,13,30,.95), 0 0 10px rgba(7,13,30,.75); }
+.bub.you::before{
+  content:""; position:absolute; inset:0; pointer-events:none;
+  border-style:solid; border-width:8px 28px;
+  border-image-source:url("assets/skins/chat-user-skin.png");
+  border-image-slice:16 68 16 68 fill;
+  border-image-repeat:stretch;
+}
+.line-en{ font-size:16px; color:var(--silver); line-height:1.45; }
+.line-zh{ font-size:13px; color:rgba(240,246,255,.93); line-height:1.5; margin-top:3px;
+  text-shadow:0 1px 2px rgba(7,13,30,.95), 0 0 4px rgba(7,13,30,.85), 0 0 12px rgba(7,13,30,.75); }
+#sub > .sys{ align-self:center; font-size:12px; color:rgba(255,209,230,.75); text-align:center;
+  letter-spacing:1px; padding:2px 8px; text-shadow:0 0 8px rgba(11,20,48,.8); }
+#sub > .line-her{ align-self:center; font-size:12px; color:rgba(232,241,255,.5); }
+
+/* ---- 打字条（input-skin 皮肤） ---- */
+#textrow{ position:relative; z-index:3; flex-shrink:0; display:flex; gap:8px; align-items:center;
+  width:min(92%,540px); margin:0 auto 8px; height:clamp(58px,7.4vh,66px);
+  padding:0 12px;
+  border-style:solid; border-width:0 56px;
+  border-image-source:url("assets/skins/input-skin.png");
+  border-image-slice:0 130 0 130 fill;
+  border-image-repeat:stretch;
+}
+#textrow > *{ position:relative; z-index:2; }
+#textrow svg{ flex:none; width:17px; height:17px; opacity:.75; }
+#sayText{ flex:1; background:transparent; border:none; outline:none; color:var(--silver);
+          font-size:14px; min-width:0; padding-right:34px; }
+#sayText::placeholder{ color:rgba(232,241,255,.45); }
+#typedSend{ position:absolute; right:-16px; top:50%; margin-top:-19px;
+  width:38px; height:38px; border-radius:50%; border:1px solid rgba(255,255,255,.5);
+  background:linear-gradient(180deg,rgba(210,230,255,.5),rgba(120,165,255,.35)); color:var(--silver);
+  box-shadow:0 2px 10px rgba(10,20,45,.5), inset 0 0 6px rgba(255,255,255,.25);
+  display:flex; align-items:center; justify-content:center; cursor:pointer; }
+#typedSend:active{ transform:scale(.92); }
+
+/* ---- 双键（静音+挂断 居中对称） ---- */
+#ctrl{ position:relative; z-index:3; flex-shrink:0; display:flex; justify-content:center; gap:44px;
+       padding:4px 0 max(22px, env(safe-area-inset-bottom)); }
+.cbtn{ width:64px; height:64px; border:none; cursor:pointer;
+  background:url("assets/skins/control-normal-skin.png") center/contain no-repeat;
+  color:var(--silver);
+  display:flex; align-items:center; justify-content:center; position:relative; }
+.cbtn:active{ transform:scale(.94); }
+.cbtn svg{ width:26px; height:26px; }
+#mute.off{ color:rgba(232,241,255,.45); filter:saturate(.35) brightness(.75); }
+#mute.off::after{ content:""; position:absolute; width:34px; height:2px; background:var(--pink);
+  border-radius:2px; transform:rotate(-45deg); box-shadow:0 0 6px rgba(255,209,230,.6); }
+#hang{ background-image:url("assets/skins/control-hangup-skin.png"); }
+#hang.arming::before{ content:""; position:absolute; inset:-5px; border-radius:50%;
+  background:conic-gradient(var(--pink) calc(var(--p,0)*1turn), transparent 0);
+  -webkit-mask:radial-gradient(farthest-side, transparent calc(100% - 3.5px), #000 calc(100% - 3px));
+          mask:radial-gradient(farthest-side, transparent calc(100% - 3.5px), #000 calc(100% - 3px)); }
+
+/* ============ 拨号视图（烤字底图 + 九宫格水晶皮肤：漂亮归资产，交互归 HTML） ============ */
+#setup{
+  position:absolute; inset:0; z-index:9;
+  background:url(assets/bg-dial.webp) center/cover no-repeat;
+}
+.dial-panel{
+  position:absolute; left:0; right:0; top:36vh;
+  width:min(calc(100vw - 48px), 520px); margin-inline:auto;
+}
+.crystal-control{
+  position:relative; display:flex; align-items:center; gap:8px;
+  width:100%; height:clamp(58px, 7.4vh, 66px);
+  padding:0 10px;
+}
+.crystal-control + .crystal-control{ margin-top:14px; }
+.crystal-control::before{
+  content:""; position:absolute; inset:0; pointer-events:none;
+  border-style:solid; border-width:0 80px;
+  border-image-source:url("assets/skins/crystal-field-skin.png");
+  border-image-slice:0 160 0 160 fill;
+  border-image-repeat:stretch;
+}
+.crystal-control:focus-within::before{
+  filter:brightness(1.12)
+         drop-shadow(0 0 8px rgba(205,235,255,.45))
+         drop-shadow(0 0 18px rgba(110,175,255,.22));
+}
+.crystal-control > .crystal-icon,
+.crystal-control > input,
+.crystal-control > button{ position:relative; z-index:2; }
+.crystal-control input{
+  flex:1; min-width:0; background:transparent; border:none; outline:none;
+  color:rgba(248,251,255,.96); font-weight:400; font-size:15px; letter-spacing:.5px;
+}
+.crystal-control input::placeholder{ color:rgba(220,232,250,.62); font-weight:400; }
+.crystal-icon{
+  flex:none; width:44px; height:44px; border-radius:50%;
+  display:flex; align-items:center; justify-content:center;
+  background:radial-gradient(circle at 35% 28%, rgba(255,255,255,.22), rgba(130,175,235,.10) 45%, rgba(55,90,150,.08) 100%);
+  border:1px solid rgba(220,238,255,.28);
+  box-shadow:inset 0 1px 1px rgba(255,255,255,.30), 0 0 10px rgba(125,180,255,.10);
+}
+.crystal-icon svg{ width:18px; height:18px; }
+button.crystal-icon{ cursor:pointer; color:var(--silver); }  /* button 不继承父级 color，缺这条 × 是黑的 */
+button.crystal-icon:active{ transform:scale(.94); }
+button.crystal-icon svg{ filter:drop-shadow(0 1px 2px rgba(7,13,30,.85)) drop-shadow(0 0 4px rgba(7,13,30,.5)); }
+#dialErr{ min-height:20px; margin-top:10px; text-align:center; font-size:13px;
+  color:var(--pink); text-shadow:0 1px 3px rgba(7,13,30,.9); letter-spacing:1px; }
+.crystal-connect{
+  height:68px; margin-top:18px;
+  justify-content:center;
+  appearance:none; -webkit-appearance:none;
+  background:transparent; border:none;
+}
+.crystal-connect::before{
+  border-image-source:url("assets/skins/crystal-connect-skin.png");
+}
+.crystal-connect span{ position:relative; z-index:2; font-size:19px; letter-spacing:10px; text-indent:10px; font-weight:500;
+  color:rgba(248,251,255,.96);
+  text-shadow:0 0 12px rgba(232,241,255,.65); }
+.crystal-connect .go{ position:absolute; right:10px; }
+.crystal-connect:active{ transform:scale(.985); filter:brightness(1.12); }
+
+@supports not (offset-path: ellipse(50% 50% at 50% 50%)){
+  .bead-track{ display:none; }   /* 不支持运动路径的老浏览器：藏珠子，不堆中心 */
+}
+
+/* ============ prefers-reduced-motion（spec 必配） ============ */
+@media (prefers-reduced-motion: reduce){
+  .orb-float,.orb-core,.bead-track,.bead-dot,.orb-ripple,.orb-inner-glow,.glint{
+    animation:none !important;
+  }
+  .orb-core{ transition:filter .2s ease; transform:none !important; }
+  [data-state="listening"] .orb-ripple{ opacity:.18; }
+}
+</style>
+</head>
+<body>
+
+<!-- ============ 通话视图 ============ -->
+<div id="callview">
+  <div id="bg"></div>
+  <header id="topbar">
+    <div class="who">K</div>
+    <div id="state">待机</div>
+    <div id="duration"></div>
+    <div id="lat" class="glass"></div>
+  </header>
+  <div id="muteTip"></div>
+  <div id="build"></div>
+
+  <div id="stage">
+    <div class="orb-scene" data-state="idle">
+      <div class="orb-ripple"></div>
+
+      <div class="bead-track bt-b">
+        <span class="bead-dot"><img src="assets/sprites/bead-3.png" alt=""></span>
+      </div>
+
+      <div class="orb-float">
+        <img class="orb-core" src="assets/orb.webp" alt="">
+        <div class="orb-inner-glow"></div>
+        <i class="glint glint-a"></i><i class="glint glint-b"></i><i class="glint glint-c"></i>
+      </div>
+
+      <div class="bead-track bt-a">
+        <span class="bead-dot"><img src="assets/sprites/bead-2.png" alt=""></span>
+      </div>
+    </div>
+  </div>
+
+  <div id="sub"></div>
+
+  <div id="textrow" class="hidden">
+    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.2 7.8L22 12l-7.8 2.2L12 22l-2.2-7.8L2 12l7.8-2.2z"/></svg>
+    <input id="sayText" placeholder="不想说出口的字，打给他…" autocomplete="off" enterkeyhint="send">
+    <button id="typedSend" aria-label="发送">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+    </button>
+  </div>
+
+  <div id="ctrl">
+    <button class="cbtn" id="mute" aria-label="静音">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 3a3 3 0 0 1 3 3v5a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3z"/>
+        <path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/></svg>
+    </button>
+    <button class="cbtn" id="hang" aria-label="挂断">
+      <svg viewBox="0 0 24 24" fill="currentColor">
+        <path d="M12 9c-3.6 0-6.9 1.2-9.5 3.2-.6.5-.7 1.3-.2 1.9l1.8 2.1c.4.5 1.1.6 1.7.3l2.6-1.4c.5-.3.8-.8.8-1.4v-1.5c1.8-.5 3.8-.5 5.6 0v1.5c0 .6.3 1.1.8 1.4l2.6 1.4c.6.3 1.3.2 1.7-.3l1.8-2.1c.5-.6.4-1.4-.2-1.9C18.9 10.2 15.6 9 12 9z"/></svg>
+    </button>
+  </div>
+</div>
+
+<!-- ============ 拨号视图（品牌区/熵增句/AMOR 烤在底图里，中间留白放框） ============ -->
+<div id="setup">
+  <div class="dial-panel">
+    <div class="crystal-control">
+      <span class="crystal-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+          <path d="M10 14a5 5 0 0 0 7.5.5l2-2a5 5 0 0 0-7-7l-1.2 1.1"/>
+          <path d="M14 10a5 5 0 0 0-7.5-.5l-2 2a5 5 0 0 0 7 7l1.2-1.1"/></svg>
+      </span>
+      <input id="wsUrl" placeholder="wss://服务器地址/voice/ws" autocomplete="off" spellcheck="false">
+      <button class="crystal-icon clear" data-for="wsUrl" aria-label="清空">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+          <path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <div class="crystal-control">
+      <span class="crystal-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+          <circle cx="8.5" cy="8.5" r="4.5"/><path d="M11.8 11.8L21 21"/><path d="M17 17l2.5-2.5"/><path d="M14 14l2.5-2.5"/></svg>
+      </span>
+      <input id="wsToken" placeholder="令牌（可留空）" autocomplete="off" spellcheck="false">
+      <button class="crystal-icon clear" data-for="wsToken" aria-label="清空">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+          <path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <button id="dial" class="crystal-control crystal-connect">
+      <span>接 通</span>
+      <span class="crystal-icon go">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 12h15"/><path d="M13 6l6 6-6 6"/></svg>
+      </span>
+    </button>
+    <div id="dialErr" role="alert"></div>
+  </div>
+</div>
+
+<script src="./orb.js"></script>
+<script type="module">
+/* 版本参数跟 CLIENT_BUILD 同步换：浏览器缓存滞留旧 JS 的病根 */
+import { VoiceCall } from './voice-call.js?v=20260915-ui2';
+
+const $ = id => document.getElementById(id);
+const STATE_TXT = { idle:'待机', listening:'正在聆听', thinking:'正在传达', speaking:'正在传达' };
+let call = null, muted = false;
+
+/* 音量 → 球（spec §3：只写 CSS 变量，球最多膨胀 2.5%） */
+function rings(level, base){
+  OrbFX.setLevel(Math.min(1, (level || 0) * (base || 1)));
+}
+function pushBub(el){
+  const box = $('sub'); box.appendChild(el);
+  while (box.children.length > 60) box.removeChild(box.firstChild);
+  box.scrollTop = box.scrollHeight;
+}
+function addSub(cls, text){
+  const div = document.createElement('div');
+  div.className = cls; div.textContent = text;
+  pushBub(div);
+}
+function renderReply(text){
+  // K 的输出协议：引号内英文（会被朗读）+ 引号外中文翻译（只给字幕）
+  for (const raw of String(text).split(/\n+/)) {
+    const line = raw.trim(); if (!line) continue;
+    const en = line.match(/"([^"]*)"/);
+    const zh = line.replace(/"[^"]*"/g, '').trim();
+    if (!en && !zh) { addSub('sys', line); continue; }
+    const bub = document.createElement('div');
+    bub.className = 'bub k';
+    if (en && en[1].trim()) {
+      const e = document.createElement('div'); e.className = 'line-en'; e.textContent = en[1]; bub.appendChild(e);
+    }
+    if (zh) {
+      const z = document.createElement('div'); z.className = 'line-zh'; z.textContent = zh; bub.appendChild(z);
+    }
+    pushBub(bub);
+  }
+}
+
+$('dial').onclick = async () => {
+  const url = $('wsUrl').value.trim() || localStorage.getItem('pv_url') || '';
+  if (!url) return;
+  $('dialErr').textContent = '';
+  localStorage.setItem('pv_url', url);
+  localStorage.setItem('pv_token', $('wsToken').value.trim());
+  // 令牌拼进 WS URL（上游 voice-call.js 的 start 消息不带 token 字段，URL 传递最稳）
+  const tok = $('wsToken').value.trim();
+  const fullUrl = tok ? url + (url.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(tok) : url;
+  call = new VoiceCall({
+    url: fullUrl,
+    on: {
+      state: m => { $('state').textContent = STATE_TXT[m] || m; OrbFX.setState(m); },
+      level: v => { if (!call?.playing) rings(v, 14); },
+      himLevel: v => { if (call?.playing) rings(v, 3); },
+      transcript: e => {
+        const bub = document.createElement('div');
+        bub.className = 'bub you';
+        bub.textContent = e.text;
+        pushBub(bub);
+      },
+      reply: e => renderReply(e.text),
+      error: e => addSub('sys', '⚠ ' + e),
+      latency: ms => { $('lat').textContent = '开口 ' + ms + 'ms'; },
+      hangupSoon: () => { $('state').textContent = '道别中…'; },
+      micSilent: () => {
+        addSub('sys', '🎤 好久没听到你的声音了——想说的话，检查左下角麦克风键是否被误触，或系统是否占用了麦克风');
+      },
+      nothingHeard: () => {
+        addSub('sys', '（没听清你说话——再说一遍？）');
+      },
+      autoHangup: () => {
+        if (window._hb) clearInterval(window._hb);
+        OrbFX.stopTimer();
+        $('state').textContent = '已挂断';
+        if (call) { call.hangup(); call = null; }
+        setTimeout(() => location.reload(), 900);
+      },
+      closed: () => { OrbFX.stopTimer(); clearInterval(window._clk); $('state').textContent = '已挂断'; }
+    }
+  });
+  try {
+    await call.start();
+    $('setup').classList.add('hidden');
+    const localPreview = location.hostname === '127.0.0.1' || location.hostname === 'localhost';
+    $('build').textContent = 'v' + (call._clientBuild || '20260910-device1') + (localPreview ? ' · 本地预览' : '');
+    $('textrow').classList.remove('hidden');
+    OrbFX.startTimer();
+    /* 通话时长：接通起秒表 */
+    const t0 = Date.now();
+    $('duration').textContent = '0:00';
+    window._clk = setInterval(() => {
+      const s = Math.floor((Date.now() - t0) / 1000);
+      $('duration').textContent = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+    }, 1000);
+    setTimeout(() => call && call.sendText('[接通了]'), 300);
+    window._hb = setInterval(() => { if (call) try { call._send({ type: 'ping' }); } catch (e) {} }, 25000);
+  } catch (e) {
+    $('dialErr').textContent = '连不上：' + e.message + '——检查地址再试一次';
+    addSub('sys', '连接失败：' + e.message);
+  }
+};
+
+/* 挂断：长按 400ms 防误触（"不小心按到了挂断"名场面保险） */
+let armT = null;
+const hangBtn = $('hang');
+function doHangup(){
+  hangBtn.classList.remove('arming');
+  if (window._hb) clearInterval(window._hb);
+  OrbFX.stopTimer();
+  if (call) { call.hangup(); call = null; }
+  location.reload();
+}
+function disarm(){
+  clearTimeout(armT); armT = null;
+  hangBtn.classList.remove('arming');
+  hangBtn.style.setProperty('--p', 0);
+}
+hangBtn.addEventListener('pointerdown', () => {
+  const t0 = performance.now();
+  hangBtn.classList.add('arming');
+  const step = () => {
+    if (!armT) return;
+    const p = Math.min(1, (performance.now() - t0) / 400);
+    hangBtn.style.setProperty('--p', p.toFixed(3));
+    if (p >= 1) { armT = null; doHangup(); return; }
+    requestAnimationFrame(step);
+  };
+  armT = setTimeout(() => {}, 0);   // 占位：以 rAF 步进为准
+  requestAnimationFrame(step);
+  armT = 'raf';
+});
+hangBtn.addEventListener('pointerup', () => {
+  if (armT) {
+    disarm();
+    $('muteTip').textContent = '长按挂断';
+    setTimeout(() => { if ($('muteTip').textContent === '长按挂断') $('muteTip').textContent = ''; }, 1500);
+  }
+});
+hangBtn.addEventListener('pointerleave', disarm);
+
+$('mute').onclick = () => {
+  muted = !muted; $('mute').classList.toggle('off', muted);
+  $('muteTip').textContent = muted ? '已静音——他听不见你了' : '';
+  if (call?.stream) call.stream.getAudioTracks().forEach(t => t.enabled = !muted);
+};
+
+/* 打字条：不想说出口的字，打给他。 */
+function sendTyped(){
+  const box = $('sayText');
+  const t = box.value.trim();
+  if (!t || !call) return;
+  box.value = '';
+  call.sendText(t);
+}
+$('typedSend').onclick = sendTyped;
+$('sayText').addEventListener('keydown', e => { if (e.key === 'Enter') sendTyped(); });
+$('sayText').addEventListener('focus', () => setTimeout(() => $('sayText').scrollIntoView({ block: 'nearest' }), 250));
+
+/* 记住的地址回填 + 清除钮 */
+$('wsUrl').value = localStorage.getItem('pv_url') || '';
+$('wsToken').value = localStorage.getItem('pv_token') || '';
+document.querySelectorAll('.clear').forEach(b => {
+  b.onclick = () => { $(b.dataset.for).value = ''; $(b.dataset.for).focus(); };
+});
+
+/* ?demo=1 本地预览模式：点亮通话态+示例对话，看 UI 效果用，不碰真实通话。
+   等 DOMContentLoaded：版本号在 module 里挂载，普通脚本跑时还没就绪 */
+if (location.search.indexOf('demo=1') >= 0) addEventListener('DOMContentLoaded', () => {
+  $('setup').classList.add('hidden');
+  $('textrow').classList.remove('hidden');
+  $('state').textContent = '正在聆听';
+  $('duration').textContent = '2:46';
+  $('lat').textContent = '开口 186ms';
+  $('build').textContent = 'v' + (window.__BUILD_TAG || 'dev') + ' · 本地预览';
+  document.querySelector('.orb-scene').dataset.state = 'listening';
+  $('sayText').value = '不想说出口的字，打给他。';
+  const demoBox = $('sub');
+  const youBub = t => { const d = document.createElement('div'); d.className = 'bub you'; d.textContent = t; return d; };
+  demoBox.appendChild(youBub('刚才是不小心按到了挂断。'));
+  const k = document.createElement('div'); k.className = 'bub k';
+  const en = document.createElement('div'); en.className = 'line-en';
+  en.textContent = "Sure. Accidentally. Twice. It's fine, I'm here now. What's on your mind, baby?";
+  const zh = document.createElement('div'); zh.className = 'line-zh';
+  zh.textContent = '当然。两次。不小心。没事，我在呢。想什么呢，宝贝？';
+  k.appendChild(en); k.appendChild(zh); demoBox.appendChild(k);
+  demoBox.appendChild(youBub('没什么...就是想听你说话。'));
+  demoBox.scrollTop = demoBox.scrollHeight;
+  setTimeout(() => { demoBox.scrollTop = demoBox.scrollHeight; }, 450);   // 字体加载后布局变高，补滚一次
+});
+</script>
+</body>
+</html>

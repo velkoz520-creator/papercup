@@ -1,0 +1,22 @@
+.env
+.env.*
+!.env.example
+node_modules/
+__pycache__/
+*.py[cod]
+*.log
+data/
+recordings/
+transcripts/
+memories/
+.DS_Store
+
+# 内部文档与本地测试产物（防误提交）
+DESIGN.md
+VOICE_CALL_MODE_PROMPT.txt
+docs/REVIEW-BRIEF-*.md
+_model_test/
+cove_tutorial_text.txt
+gen_first_voice.py
+glm_test.py
+*.mjs
