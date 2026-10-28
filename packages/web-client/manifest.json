@@ -1,0 +1,18 @@
+{
+  "id": "/",
+  "name": "Papercup 纸杯电话",
+  "short_name": "纸杯",
+  "lang": "zh",
+  "description": "天天与克老师的实时通话页",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0B1430",
+  "theme_color": "#0B1430",
+  "icons": [
+    { "src": "assets/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "assets/icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "assets/icons/icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "assets/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
